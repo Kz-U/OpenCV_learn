@@ -1,0 +1,226 @@
+CvArr
+  |--->CvMat
+		 |--->IplImage
+他们之间的关系如同C++中的继承关系; 其结构体的设计融入了面向对象和面向模板的设计思想。
+当(CvArr *)出现时，可以将CvMat* 或 IplImage*传递到程序。
+cvMat* cvCreateMat( int rows, int cols, int type);
+type 可以是任何预定义类型，如：CV_<bit_depth>(S|U|F)C<number_of_channels>
+32位浮点型数据：CV_32FC1;	无符号的8位三元组的整形数据CV_8UC3
+对于一个包含RGB通道的简单图像，大多数的图像操作将分别应用与每一个通道(除非另有说明)
+
+CvMat结构：矩阵头
+typedef struct CvMat{
+	int type;	//类型
+	int step;	//行数据长度
+	int *refcount;	//for internal use only
+	union{
+		uchar* ptr;
+		short* s;
+		int* i;
+		float* fl;
+		double* db;
+	}data;			//data成员所指向的内存称为数据体
+	union{
+		int rows;
+		int height;
+	};
+	union{
+		int cols;
+		int width;
+	};
+}CvMat;
+
+获取Mat或IplImage中的数据时，最好使用cvPtr*D; 除非认为使用cvGet*D更方便和高效时。
+#----------------------------------------------------------------------------------------------------
+/*用imageROI(region of interest),来增加某范围的像素*/
+//roi_add <image> <x> <y> <width> <height> <add>
+#include <cv.h>
+#include <highgui.h>
+
+int main(int argc, char **argv)
+{
+	IplImage* src;
+	if(argc == 7 && ((src = cvLoadImage(argv[1],1)) != 0) )
+	{
+		int x = atoi(argv[2]);
+		int y = atoi(argv[3]);
+		int width = atoi(argv[4]);
+		int height = atoi(argv[5]);
+		int add = atoi(argv[6]);
+		cvSetImageROI(src, cvRect(x, y, width, height));
+		cvAddS(src, cvScalar(add), src);
+		cvResetImageROI(src);
+		cvNamedWindow("Roi_Add", 1);
+		cvShowImage("Roi_Add",src);
+		cvWaitKey();
+	}
+	return 0;
+}
+
+/*利用其他widthStep方法把interest_img的所有像素值增加1*/
+//Assuming IplImage *interest_img; and CvRect interest_rect;
+//Use width Step to get region of interest 
+//(Alternate method)
+IplImage *sub_img = cvCreateImageHeader( cvSize(interest_rect.width, interest_rect.height), interest_img->depth, interest_img->nChannels );
+
+sub_img->origin = interest_img->origin;
+sub_img->widthStep = interest_img->widthStep;
+sub_img->imageData = interest_img->imageData + interest_rect.y*interest_img->widthStep +
+						interest_rect.x*interest_img->nChannels;
+cvAdds( sub_img, cvScalar(1), sub_img );
+
+cvReleaseImageHeader(&sub_img);
+/* 看起来设置和重置ROI更方便一些，但是ROI只能串行处理并且必须不断地设置和重置。
+ * 在示例代码中cvAdds()函数允许第4个参数默认值为空：const CvArr* mask=NULL,这是一个8位单通道
+ * 数组，它允许把操作限制到任意形状的非0像素的掩码区，如果ROI发生变化，进程将会被限制在ROI和掩码的交集区
+*/
+#-------------------------------------------------------------------------------------------------------
+
+矩阵和图像基本操作
+cvAddS		一个数组和一个标量的元素级的相加运算
+-----------------
+cvAbs	cvAbsDiff	cvAbsDiffs	:	src元素的值得绝对值; src1-src2所得差值的绝对值; src1-constVar得值绝对值
+cvAdd	cvAddS		cvAddWeighted 
+
+//src2 中alpha融合ROI以(0,0)开始，src1中ROI以(x,y)开始 
+//alphablend <imageA> <imageB> <x> <y> <width> <height> <alpha> <beta>
+#include <cv.h>
+#include <heighgui.h>
+
+int main(int argc, char **argv)
+{
+	IplImage *src1, *src2;
+	
+	if( argc==9 && (src1=cvLoadImage(argv[1],1))!=0 && \
+		src2=cvLoadImage(argv[2], 1) !=0)
+	{
+		int x = atoi(argv[3]);
+		int y = atoi(argv[4]);
+		int width = atoi(argv[5]);
+		int height = atoi(argv[6]);
+		double alpha = (double)atof(argv[7]);
+		double beta = (double)atof(argv[8]);
+		cvSetImageROI(src1, cvRect(x, y, width, height));
+		cvSetImageROI(src2, cvRect(0, 0, width, height));
+		cvAddWeighted(src1, alpha, src2, beta, 0.0, src1);
+		cvResetImageROI(src1);
+		cvNamedWindow("Alpha_blend", 1);
+		cvShowImage("Alpha_blend", src1);
+		cvWaitKey();
+	}
+	return 0;
+}
+
+----------------
+用鼠标在窗口中画方形的程序
+//An example program in which the user can draw boxes on the screen.
+#include <cv.h>
+#include <highgui.h>
+
+//Define our callback which we will install for mouse events.
+void my_mouse_callback(int event, int x, int y, int flags, void *param);
+
+CvRect box;
+bool drawing_box = false;
+
+//A litte subroutine to draw a box onto an image
+void draw_box(IplImage *img, CvRect rect)
+{
+	cvRectangle(img, cvPoint(box.x, box.y), cvPoint(box.x+box.width, box.y+box.height), \
+				cvScalar(0xff, 0x00, 0x00)); /*red*/
+}
+
+int main(int argc, char *argv[])
+{
+	box = cvRect(-1, -1, 0, 0);
+	
+	IplImage *image = cvCreateImage(cvSize(200, 200), IPL_DEPTH_8U, 3);
+	cvZero(image);
+	IplImage *temp = cvCloneImage(image);
+	
+	cvNamedWindow("Box Example");
+	
+	//Here is the crucial moment that we actully install the callback. Note that we set the value 'param'
+	//to be the image we are working with so that the callback will have the image to edit.
+	cvSetMouseCallback("Box Example", my_mouse_callback, (void*)image);
+	
+	//The main program loop. Here we copy the working image to the 'temp' image, and if the user is drawing
+	//, then put the currently contemplated box onto that temp image. Dispaly the temp image, and wait 15ms
+	//for a keystroke, the repeat ...
+	while(1){
+		cvCopyImage(image, temp);
+		if(drawing_box) draw_box(temp, box);
+		cvShowImage("Box Example", temp);
+		
+		if(cvWaitKey(15) == 27 ) break;
+	}
+	
+	//Betidy
+	cvReleaseImage(&image);
+	cvReleaseImage(&temp);
+	cvDestroyWindow("Box Example");
+}
+
+//This is our mouse callback. If the user presses the left button, we start a box. when the user releases
+//that button, then we add the box to the current image, When the mouse is dragged(with the button down)
+//we resize the box.
+void my_mouse_callback(int event, int x, int y, int flags, void *param)
+{
+	IplImage image = (IplImage*)param;
+	switch(event){
+		case CV_EVENT_MOUSEMOVE:{
+			if(drawing_box){
+				box.width = x-box.x;
+				box.height = y-box.y;
+			}
+		}
+		break;
+		case CV_EVENT_LBUTTONDOWN:{
+			drawing_box = true;
+			box = cvRect(x, y, 0, 0);
+		}
+		break;
+		case CV_EVENT_LBUTTONUP:{
+			drawing_box = false;
+			if(box.width<0){
+				box.x+=box.width;
+				box.width *= -1;
+			}
+			if(box.height<0){
+				box.y += box.height;
+				box.height *= -1;
+			}
+			draw_box(image, box);
+		}
+		break;
+	}
+}
+
+---------------
+//使用滑动条实现一个开关功能，用户可以选择打开或关闭
+//We make this value global so everyone can see it.
+int g_switch_value = 0;
+
+//This will be the callback that we give to the trackbar.
+void switch_callback(int position)
+{
+	if(position == 0){
+		switch_off_function();
+	}else{
+		switch_on_function();
+	}
+}
+
+int main(int argc, char *argv[])
+{
+	//Name the main window
+	cvNamedWindow("Demo Window", 1);
+	
+	//Create the trackbar. We give it a name, and tell it the name of the parent window.
+	cvCreateTrackbar("Switch", "Demo Window", &g_switch_value, 1, switch_callback);
+	
+	//This will just cause OpenCV to idle until someone hits the "Escape" key.
+	while(1){
+		if(cvWaitKey(15)==27) break;
+	}
+}

@@ -1,0 +1,338 @@
+1. 安装OpenCV
+	指定安装目录，配置环境变量。OpenCV所有源码在_make目录下
+	# Windows上安装
+	# Ubuntu上安装
+	
+2. 编译配置
+	库文件的路径，头文件的路径
+	# Qt工程配置文件
+	# VC6.0 
+	  Tool->Option->Directory
+	  Project->ProjSetting->Link <cv.lib cxcore.lib highgui.lib>
+	  错误：找不到highgui.dll ==> 将.dll拷贝到system32目录下
+
+3. OpenCV结构 
+	# cxcore 
+		基础结构：CvPoint, CvSize, CvScalar
+		数组操作：cvCreateImage, cvCreateMat
+		动态结构：CvMemStorage, CvMemBlock
+		绘图函数：cvLine, cvRectangle
+		数据保存和运行时类型信息：CvFileStorage, cvOpenFileStorage
+		错误处理和系统函数：cvGetErrStatus, cvAlloc, cvFree 
+	# cv 
+		图像处理：cvSobel, cvCanny
+		结构分析：ContourArea
+		运动分析与目标跟踪：cvMeanShift
+		模式识别：CvHaarFeature
+		摄像头定标与三维重建：cvCalibrateCamer2
+	# Machine Learning(ML)
+		包含：聚类、分类和数据分析函数，如Bayes分类器、K近邻算法、支持
+		向量机、决策树、神经网络等待。
+	# HighGUI
+		图像界面函数：cvNamedWindow
+		读图像和保存图像：cvLoadImage、cvSaveImage
+		读视频和写视频：CvCreateFileCapture
+	# cvcam
+		OpenCV1.0后移除了
+	# cvaux 
+		该模块一般存放一些即将淘汰的算法和函数，还包含一些实验性的算法
+
+4. 图像读取和显示 
+	#include "cv.h"
+	#include "cvcore.h" 
+	#include "highgui.h"
+
+	int main(int argc, char **argv)
+	{
+		IplImage *img = cvLoadImage(argv[1]);
+		cvNameWindow("Example1", CV_WINDOW_AUTOSIZE);
+		cvShowImage("Example1", img);
+		cvWaitKey(0);
+		cvReleaseImage(&img);
+		cvDestroyWindow("Example1");
+	}
+ 
+5. 视频读取和播放 
+	# 从摄像头读取图像帧
+	# 通过解码视频文件得到图像帧
+	
+	#include "highgui.h"
+
+	int g_slider_position = 0;
+	CvCapture *g_capture = NULL;
+	int frame_cnt = 0;
+
+	void onTrackbarSlide(int pos)
+	{
+		//当进度条改变时设置下一帧的位置CV_CAP_PROP_POS_FRAMES
+		cvSetCaptureProperty(g_capture,CV_CAP_PROP_POS_FRAMES,pos);
+		frame_cnt = pos;
+	}
+
+	int main(int argc, char ** argv)
+	{
+		cvNameWindow("Example3", CV_WINDOW_AUTOSIZE);
+		g_capture = cvCreateFileCapture(argv[1]);
+		//cvCreateCameraCapture输入参数ID为-1时表示随机选择一个摄像头
+		int frames = (int)cvGetCaptureProperty(g_capture, CV_CAP_PROP_FRAME_COUNT);
+		if(frames!=0){
+			//当滑动滚动条时调用onTrackbarSlide回调函数，通过g_slider_position返回滚动条位置的值
+			cvCreateTrackbar("Position","Example3",&g_slider_position,frames,onTrackbarSlide);
+		}
+		IplImage *frame;
+		while(1){
+			frame = cvQueryFrame(g_capture);
+			if(!frame) break;
+			cvShowImage("Example3", frame);
+			
+			char c = cvWaitKey(33); //控制帧率
+			if(c == 27) break; //Esc
+			
+			//update the slider 每播放一帧更新进度条
+			cvSetTrackbarPos("进度条名"，"窗口名"， frame_cnt);
+			frame_cnt++;
+		}
+		cvReleaseCapture(&g_capture);
+		cvDestroyWindow("Example2");
+	}
+	
+6. 写视频文件 (将图片制作成视频)
+# cvCreateVideoWriter
+# cvWriteFrame
+# cvReleaseVideoWriter
+-------------------------------------
+#include "cv.h"
+#include "highgui.h"
+#include "cxcore.h"
+#include "stdio.h"
+#include "stdlib.h"
+
+int main(int argc, char *argv[])
+{
+	CvSize size = cvSize(480,360);
+	double fps = 30;
+	
+	CvVideoWriter* writer = cvCreateVideoWriter("F:\\documents\\videos\\out.avi", 
+													CV_FOURCC('X','V','I','D'), fps, size);
+	
+	int image_id = 0;
+	char filename[256];
+	
+	sprintf(filename, "F:\\pictures\\images\\%d.jpg", image_id);
+	
+	IplImage* src = cvLoadImage(filename);
+	
+	if(!src) return 0;
+	
+	IplImage* src_resized = cvCreateImage(size, 8, 3); //deepth, channels
+	
+	cvNameWindow("avi");
+	
+	while(src)
+	{
+		cvShowImage("avi", src_resized);
+		cvWaitKey(1);
+			
+		cvResize(src, src_resized);
+		cvWriteFrame(writer, src_resized);
+		
+		cvReleaseImage(&src);
+			
+		image_id++;
+		sprintf(filename, "F:\\pictures\\images\\%d.jpg", image_id);
+		IplImage* src = cvLoadImage(filename);
+	}
+	
+	cvReleaseVideoWriter(&writer);
+	cvReleaseImage(&src_resized);
+	return 0;
+}
+#注意：
+	电脑中必须安装有对应的编解码器CV_FOURCC('X','V','I','D')，若没有传入-1，然后运行时在弹出的
+	窗口中选择一个本电脑中的编解码器。
+
+7. OpenC基本数据结构
+cxcore/include/cxtypes.h: 
+	|==> CvPoint, CvSize, CvRect, CvScalar, CvArr 
+CvArr
+	|--> CvMat
+			|--> IplImage
+			
+8. 矩阵通道和维度 
+#单通道数据访问：
+	cvGetReal1D, cvGetReal2D, cvGetReal3D, cvGetRealND
+#多通道数据访问：
+	cvGet1D, cvGet2D, cvGet3D, cvGetND
+注意：
+	对应的数据设置函数cvSet*D; 这些函数的缺点是效率(时间效率)低。
+--------------------------------------------------------
+int main()
+{
+	float data[18] = {30, 60, 40, 60, 50, 40,
+					  67, 88, 55, 33, 22, 97,
+					  59,69, 32, 46, 25, 45};
+	CvMat mat;
+	cvInitMatHeader(&mat, 3, 6, CV_32FC1, data); //单通道 
+	//cvInitMatHeader(&mat, 3, 3, CV_32FC2, data); //双通道
+	
+	for(int y=0; y<mat.rows; y++)
+	{
+		for(int x=0; x<mat.cols; x++)
+		{
+			float value = cvGetReal2D(&mat, y, x);
+			printf("%f\t", value);
+			
+			//双通道 
+			CvScalar value = cvGet2D(&mat, y, x);
+			printf("<%f %f>\t", value.val[0], value.val[1]);
+		}
+		printf("\n");
+	}
+}
+通道：一值由几部分组成
+维度：访问一个值的坐标的维数
+	
+9. 矩阵数据的访问 
+考虑到时间效率问题，我们一般不使用OpenCV提供的访问数据的函数，
+所以我们之间使用指针来访问。
+CvMat结构：矩阵头
+------------------------------
+	typedef struct CvMat{
+		int type;	//类型
+		int step;	//行数据长度
+		int *refcount;	//for internal use only
+		union{
+			uchar* ptr;
+			short* s;
+			int* i;
+			float* fl;
+			double* db;
+		}data;			//data成员所指向的内存称为数据体
+		union{
+			int rows;
+			int height;
+		};
+		union{
+			int cols;
+			int width;
+		};
+	}CvMat;
+------------------------------
+	for(int y=0; y<mat.rows; y++)
+	{	
+		float* p_float = (float*)(mat.data.ptr + y*mat.step);
+		for(int x=0; x<mat.cols; x++)
+		{
+			float value = *(p_float + x);
+			printf("%f\t", value);
+		}
+		printf("\n");
+	}
+
+10. IplImage结构体 
+---------------------
+	for(int y=0; y<img->height; y++)
+	{	
+		unsigned char* prow = (unsigned char*)(img->imageData + y*image->widthStep);
+		for(int x=0; x<img->width; x++)
+		{
+			prow[3*x + 0]; //B
+			prow[3*x + 1]; //G
+			prow[3*x + 2]; //R   RGB(在内存中的数据存放顺序)
+		}
+		printf("\n");
+	}
+	
+11. ROI和COI
+# ROI: Region Of Interest		感兴趣的区域；另：通过图像掩码可以获得非规则图形的区域
+# COI: Channels Of Interest		感兴趣的通道 
+-------------------------------
+int main()
+{
+	IplImage* img;
+	img = cvLoadImage("filename");
+	
+	CvRect rect;
+	rect.x = 107; //矩形区域的坐标可以通过？？？获得
+	rect.y = 13;
+	rect.width = 160;
+	rect.height = 140;
+	
+	cvSetImageROI(img, rect); //设置之后不管是显示还是其它操作，只会操作ROI区域数据
+	cvResetImageROI(img); //用完该ROI区域后取消ROI区域设置
+	
+	//cvCopy(imgdes, imgsrc); //将imgsrc图像拷贝到imgdes; 也可以自己操作数据指针进行实现
+}
+
+12. 直方图 (各个bin中点的个数)
+落在一个范围内点的个数，在一维图中为对应的高度
+---------------------
+typedef struct CvHistogram
+{
+	int type;
+	CvArr* bins; //存放直方图在每一维上直方柱的具体数据
+	float thresh[CV_MAX_DIM][2];
+	float** thresh2;
+	CvMatND mat; //存放直方图的数据
+}
+
+13. RGB颜色空间
+# RGB都取255时时白色, 三基色可以混合出自然界所有颜色
+# 互补光：当两种颜色按照适当比例混合得到白光时，称这两种光为互补光。
+# 亮度的定义：单色光的亮度强度各不相同，根据人的感受是：绿色最亮，红光次之，蓝光最暗
+  如果用Y表示景物的亮度，则通常有：Y = 0.299R+0.587G+0.114B 
+# 颜色空间的对角线是亮度。R=G=B时图像的显示效果跟单通道时类似，都是灰度图的效果
+	
+14. HSV空间 
+# 这个模型中颜色的参数分别是：色调（H），饱和度（S），明度（V）。
+# 从HSV圆锥底部越向上越亮，圆锥截面圆沿半径越向外越饱和，截面圆的圆心角
+
+15. 颜色空间的转换
+cvCvtColor(src, img_hsv, CV_BGR2HSV);
+cvSplit(img_hsv, img_h, img_s, img_v, NULL); //按通道分离，相反的cvMerge按通道融合
+cvConvertScale(); //转换数据类型 char <==> float 
+# cvShowImage 把数据都当成RGB空间进行显示
+------------------------
+RGB转化到HSV的算法:
+max=max(R,G,B)；
+min=min(R,G,B)；
+V=max(R,G,B)；
+S=(max-min)/max；
+HSV颜色空间模型（圆锥模型）
+HSV颜色空间模型（圆锥模型）
+if (R = max) H =(G-B)/(max-min)* 60；
+if (G = max) H = 120+(B-R)/(max-min)* 60；
+if (B = max) H = 240 +(R-G)/(max-min)* 60；
+if (H < 0) H = H+ 360；
+
+
+16. 图像的腐蚀 
+结构元素的创建：
+cvCreateStructuringElementEx();
+腐蚀操作：
+cvErode();
+
+17. 膨胀 
+cvDilate();
+和腐蚀刚好相反；取锚点周围最大的值替换锚点的值。
+#如果是对彩色图进行腐蚀和膨胀处理，则是对每个通道进行处理
+
+18. 图像的细化 
+骨架提取，以索引表算法为例：
+将p点8连通域的每一种情况下是否可以删除p点出来，然后通过索引的方法来进行图像的细化。
+判断边缘点是否可以被去掉
+
+19. 轮廓的提取
+二值图、连通域、外轮廓、内轮廓
+cvFindConttours();
+
+20. 数字类型图像匹配
+普通矩、中心矩、hu矩
+#通过比较hu矩来确定相似度(hu矩之间的距离越小，越相似)
+
+21. 模板匹配 
+在一副图像上使用模板大小的滑动窗口逐像素移动进行匹配，计算相似度
+
+	
+	
+

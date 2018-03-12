@@ -1,0 +1,180 @@
+/******************************
+** 显示图像
+******************************/
+#include "highgui.h"
+
+int main(int argc, char **argv)
+{
+	IplImage *img = cvLoadImage(argv[1]);
+	cvNameWindow("Example1", CV_WINDOW_AUTOSIZE);
+	cvShowImage("Example1", img);
+	cvWaitKey(0);
+	cvReleaseImage(&img);
+	cvDestroyWindow("Example1");
+}
+
+/******************************
+** 播放AVI视屏
+******************************/
+#include "highgui.h"
+
+int main(int argc, char **argv)
+{
+	cvNameWindow("Example2", CV_WINDOW_AUTOSIZE);
+	CvCapture *capture = cvCreateFileCapture(argv[1]);
+	IplImage *frame;
+	while(1){
+		frame = cvQueryFrame(capture);
+		if(!frame) break;
+		cvShowImage("Example2", frame);
+		char c = cvWaitKey(33);
+		if(c == 27) break;
+	}
+	cvReleaseCapture(&capture);
+	cvDestroyWindow("Example2");
+}
+
+/******************************
+** 视屏播放控制
+******************************/
+#include "highgui.h"
+
+int g_slider_position = 0;
+CvCapture *g_capture = NULL;
+
+void onTrackbarSlide(int pos)
+{
+	cvSetCaptureProperty(g_capture,CV_CAP_PROP_POS_FRAMES,pos);
+}
+
+int main(int argc, char ** argv)
+{
+	cvNameWindow("Example3", CV_WINDOW_AUTOSIZE);
+	g_capture = cvCreateFileCapture(argv[1]);
+	int frames = (int)cvGetCaptureProperty(g_capture, CV_CAP_PROP_FRAME_COUNT);
+	if(frames!=0){
+		cvCreateTrackbar("Position","Example3",&g_slider_position,frames,onTrackbarSlide);
+	}
+	IplImage *frame;
+	while(1){
+		frame = cvQueryFrame(g_capture);
+		if(!frame) break;
+		cvShowImage("Example3", frame);
+		//update the slider bar by cvSetTrackbarPos("进度条名"，"窗口名"，pos)
+		char c = cvWaitKey(33); //控制帧率
+		if(c == 27) break; //Esc
+	}
+	cvReleaseCapture(&g_capture);
+	cvDestroyWindow("Example2");
+}
+
+/******************************
+** 载入一副图像并进行平滑处理
+******************************/
+#include "cv.h"
+#include "highgui.h"
+
+void example2_4(IplImage *image)
+{
+	//Create some windows to show the input and ouput images in.
+	cvNameWindow("Example4-in");
+	cvNameWindow("Example4-out");
+	
+	//Create a window to show our intput image
+	cvShowImage("Example4-in", image);
+	
+	//Create an image to hold the smoothed output 
+	IplImage *out = cvCreateImage(cvGetSize(image),IPL_DEPTH_8U,3);
+	
+	//Do the smoothing 
+	cvSmooth(image, out, CV_GAUSSIAN, 3, 3);
+	
+	//Show the smoothed image in the ouput window
+	cvShowImage("Example4-out", out);
+	
+	//Be tidy
+	cvReleaseImage(&out);
+	
+	//Wait for the user to hit a key, then clean up the windows
+	cvWaitKey(0);
+	cvDestroyWindow("Example4-in");
+	cvDestroyWindow("Example4-out");
+}
+
+/******************************
+** 图像缩放
+******************************/
+IplImage *doPyrDown(IplImage *in, int filter = IPL_GAUSSIAN_5x5)
+{
+	//Best to make sure input image is dividible by two.
+	assert(in->width%2 == 0 && in->height%2 == 0)
+	IplImage *out = cvCreateImage(cvSize(in->width/2, in->height/2), in->depth, in->nChannels);
+	doPyrDown(in, out);
+	return out;
+}
+
+/******************************
+** Canny 边缘检测将输出写入一个单通道(灰度级)图像 
+******************************/
+IplImage *doCanny(IplImage *in, double lowThresh, double highThresh, double aperture)
+{
+	if(in->nChannels!=1)
+		return 0;	//Canny only handles gray scale images 
+	
+	IplImage *out = cvCreateImage(cvSize(in), IPL_DEPTH_8U, 1);
+	cvCanny(in, out, lowThresh, highThresh, aperture);
+	return out;
+}
+
+/******************************
+** 在一个简单的图像处理流程中进行两次缩放处理与Canny边缘检测 
+******************************/
+IplImage *img1 = doPyrDown(in, IPL_GAUSSIAN_5x5);
+IplImage *img2 = doPyrDown(img1, IPL_GAUSSIAN_5x5);
+IplImage *img3 = doCanny(img2, 10, 100, 3);
+
+/******************************
+** capture 结构初始化后，从视屏文件或摄像头读入图像数据没有区别 
+******************************/
+CvCapture *capture;
+if(argc==1){
+	capture = cvCreateCameraCapture(0);
+}else{
+	capture = cvCreateFileCapture(argv[1]);
+}
+assert(capture!=NULL);
+//Rest of program process totally ignorant
+
+/******************************
+** 读入一个彩色视屏文件并以灰度格式输出这个视频文件
+******************************/
+//Convert a video to grayscale
+//argv[1] : input video file 
+//argv[2] : name of new output file 
+#include "cv.h"
+#include "highgui.h"
+
+int main(int argc, char **argv)
+{
+	CvCapture *capture = 0;
+	capture = cvCreateFileCapture(argv[1]);
+	if(!capture){
+		return -1;
+	}
+	IplImage *bgr_frame = cvQueryFrame(capture); //Init the video read 
+	double fps = cvGetCaptureProperty(capture, CV_CAP_PROP_FPS);
+	CvSize size = cvSize((int)cvGetCaptureProperty(capture,CV_CAP_PROP_FRAME_WIDTH),
+	(int)cvGetCaptureProperty(capture,CV_CAP_PROP_FRAME_HEIGHT));
+	CvVideoWriter *writer = cvCreateVideoWriter(argv[2], CV_FOURCC('M','J','P','G'), fps, size);
+	IplImage *logpolar_frame = cvCreateImage(size, IPL_DEPTH_8U, 3);
+	
+	while((bgr_frame = cvQueryFrame(capture))!=NULL){
+		cvLogPolar( bgr_frame, logpolar_frame, cvPoint2D32f(bgr_frame->width/2, bgr_frame->height/2),
+					40, CV_INTER_LINEAR + CV_WAP_FILL_OUTLINERS );
+		cvWriteFrame(&writer);
+	}
+	cvReleaseVideoWriter(&writer);
+	cvReleaseImage(&logpolar_frame);
+	cvReleaseCapture(&capture);
+	return 0;
+}

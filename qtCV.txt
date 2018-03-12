@@ -1,0 +1,36 @@
+Qt错误：cannot find -lGL解决方法
+错误描述：
+cannot find -lGL  
+collect2:error:ld returned 1  exit status 
+解决方法：
+sudo apt-get install libgl1-mesa-dev 
+
+OpenCV错误：
+错误描述：
+'imread' was not declared in this scope
+解决方法：
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+using namespace cv;
+Mat imgMat = imread("20160802.jpeg");//const String* filename);
+如果没有引用vc命名空间，则需要加cv::
+cv::Mat imgMat = cv::imread("20160802.jpeg");//const String* filename);
+
+
+软件源的更改：
+Software Center中Edit选项下更新为网易的源
+
+输入法的安装：
+sudo  apt-get update
+sudo  apt-get install fcitx 
+sudo  apt-get install fcitx-googlepinyin
+搜狗：
+sudo dpkg  -i   sogou_pinyin_linux_1.0.0.0033_amd64.deb
+修复依赖关系完成搜狗拼音输入法的安装，在终端执行以下命令(联网)
+sudo apt-get install -f 
+
+修复系统：
+重启系统 按住shift键 进入grub界面
+进入单用户模式(root),进行修复操作
+
+
